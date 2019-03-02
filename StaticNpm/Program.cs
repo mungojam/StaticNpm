@@ -1,6 +1,7 @@
 ﻿using System;
 using System.IO;
 using System.IO.Compression;
+using static_npm;
 
 namespace StaticNpm
 {
@@ -15,32 +16,7 @@ namespace StaticNpm
             // Normalizes the path.
             extractPath = Path.GetFullPath(extractPath);
 
-            // Ensures that the last character on the extraction path
-            // is the directory separator char. 
-            // Without this, a malicious zip file could try to traverse outside of the expected
-            // extraction path.
-            if (!extractPath.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal))
-                extractPath += Path.DirectorySeparatorChar;
-
-            Decompress(new FileInfo(zipPath));
-        }
-
-        public static void Decompress(FileInfo fileToDecompress)
-        {
-            using (var originalFileStream = fileToDecompress.OpenRead())
-            {
-                var currentFileName = fileToDecompress.FullName;
-                var newFileName = currentFileName.Remove(currentFileName.Length - fileToDecompress.Extension.Length);
-
-                using (var decompressedFileStream = File.Create(newFileName))
-                {
-                    using (var decompressionStream = new GZipStream(originalFileStream, CompressionMode.Decompress))
-                    {
-                        decompressionStream.CopyTo(decompressedFileStream);
-                        Console.WriteLine($"Decompressed: {fileToDecompress.Name}");
-                    }
-                }
-            }
+            new PackageArchive().GetPackageJson(new FileInfo(zipPath));
         }
     }
 }
