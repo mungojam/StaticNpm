@@ -5,7 +5,7 @@ VisualStudioVersion = 16.0.28621.142
 MinimumVisualStudioVersion = 15.0.26124.0
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "StaticNpmLib", "StaticNpmLib\StaticNpmLib.csproj", "{3848BB11-5626-4E41-BA7D-16740A2B6DD1}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "StaticNpm", "StaticNpm\StaticNpm.csproj", "{08D889A3-2777-4FDA-A32E-8452A63809B0}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "StaticNpm", "StaticNpm\StaticNpm.csproj", "{08D889A3-2777-4FDA-A32E-8452A63809B0}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

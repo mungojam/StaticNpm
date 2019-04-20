@@ -1,13 +1,14 @@
 ﻿using System;
 using System.IO;
 using System.IO.Compression;
+using System.Threading.Tasks;
 using static_npm;
 
 namespace StaticNpm
 {
     class Program
     {
-        static void Main(string[] args)
+        static async Task Main(string[] args)
         {
             var zipPath = @"C:\Users\mark\Dropbox\marks\Desktop\react-redux-6.0.1.tgz";
 
@@ -16,7 +17,7 @@ namespace StaticNpm
             // Normalizes the path.
             extractPath = Path.GetFullPath(extractPath);
 
-            new PackageArchive().GetPackageJson(new FileInfo(zipPath));
+            var packageJson = await new PackageArchive().GetPackageJsonAsync(new FileInfo(zipPath));
         }
     }
 }
