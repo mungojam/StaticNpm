@@ -1,23 +1,55 @@
 ﻿using System;
-using System.IO;
-using System.IO.Compression;
 using System.Threading.Tasks;
+using CommandLine;
 using static_npm;
 
 namespace StaticNpm
 {
     class Program
     {
-        static async Task Main(string[] args)
+        static async Task<int> Main(string[] args)
         {
-            var zipPath = @"C:\Users\mark\Dropbox\marks\Desktop\react-redux-6.0.1.tgz";
 
-            var extractPath = @"C:\Users\mark\source\repos\static-npm\tt";
+            try
+            {
+                await Parser.Default.ParseArguments<AddOptions, InitOptions>(args)
+                    .MapResult<AddOptions, InitOptions, Task>(
+                        RunAdd,
+                        RunInit,
+                        errs => throw new InvalidOperationException()
+                    );
+            }
+            catch (Exception e)
+            {
+                Console.Error.WriteLine(e);
+                return 1;
+            }
 
-            // Normalizes the path.
-            extractPath = Path.GetFullPath(extractPath);
+            return 0;
 
-            var packageJson = await new PackageArchive().GetPackageJsonAsync(new FileInfo(zipPath));
+        }
+
+        private static Task RunInit(InitOptions initOptions)
+        {
+            PackageRepository().Initialize();
+            return Task.CompletedTask;
+        }
+
+        private static async Task RunAdd(AddOptions options)
+        {
+            var packageRepo = PackageRepository();
+
+            await packageRepo.Add(options.Source);
+        }
+
+        private static PackageRepository PackageRepository()
+        {
+            var extractPath = @"C:\Users\mark\Dropbox\Marks\Desktop\static-npm-repo";
+
+            var repoOptions = new PackageRepositoryOptions(extractPath);
+
+            var packageRepo = new PackageRepository(repoOptions);
+            return packageRepo;
         }
     }
 }
