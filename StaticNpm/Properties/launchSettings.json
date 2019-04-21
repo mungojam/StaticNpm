@@ -2,7 +2,7 @@
   "profiles": {
     "StaticNpm": {
       "commandName": "Project",
-      "commandLineArgs": "add --source C:\\Users\\mark\\Dropbox\\marks\\Desktop\\react-redux-6.0.1.tgz"
+      "commandLineArgs": "add --source C:\\Users\\mark\\Dropbox\\Marks\\Desktop\\static-npm-repo\\_packages"
     }
   }
 }
