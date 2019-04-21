@@ -46,7 +46,7 @@ namespace StaticNpm
         {
             var extractPath = @"C:\Users\mark\Dropbox\Marks\Desktop\static-npm-repo";
 
-            var repoOptions = new PackageRepositoryOptions(extractPath);
+            var repoOptions = new PackageRepositoryOptions(extractPath, new Uri("http://localhost:9000"));
 
             var packageRepo = new PackageRepository(repoOptions);
             return packageRepo;

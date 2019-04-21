@@ -1,5 +1,7 @@
 ﻿using System;
+using System.Collections.Immutable;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using ICSharpCode.SharpZipLib.GZip;
 using ICSharpCode.SharpZipLib.Tar;
@@ -46,16 +48,14 @@ namespace static_npm
         public void Initialize()
         {
             Directory.CreateDirectory(Options.Location);
+            Directory.CreateDirectory(PackagesPath);
         }
 
-        public bool IsInitialized => Directory.Exists(Options.Location);
+        private string PackagesPath => Path.Combine(Options.Location, "_packages");
 
         public async Task Add(string packageSource)
         {
-            if (!IsInitialized)
-            {
-                throw new ApplicationException("Repository must be initialized first");
-            }
+            Initialize();
 
             if (Directory.Exists(packageSource))
             {
@@ -63,7 +63,7 @@ namespace static_npm
                 {
                     await AddFile(packageFile);
                 }
-            } 
+            }
             else if (File.Exists(packageSource))
             {
                 await AddFile(packageSource);
@@ -74,22 +74,68 @@ namespace static_npm
             }
 
 
-            async Task AddFile(string packageFile)
+            async Task AddFile(string packageFile, bool updateIndex = true)
             {
                 var packageFileInfo = new FileInfo(packageFile);
 
                 var packageJson = await GetPackageJsonAsync(packageFileInfo);
 
-                var packageName = packageJson["name"].ToString();//.RootElement.GetProperty("name").GetString();
-                var packageVersion = packageJson["version"].ToString();//RootElement.GetProperty("version").GetString();
+                var packageName = packageJson["name"].ToString();
+                var packageVersion = packageJson["version"].ToString();
 
-                var packageExtractDir = Path.Combine(Options.Location, packageName, packageVersion);
+                var packageExtractDir = Path.Combine(PackageDirectory(packageName), packageVersion);
 
                 Directory.CreateDirectory(packageExtractDir);
+                
 
-                packageFileInfo.CopyTo(Path.Combine(packageExtractDir, packageFileInfo.Name), true);
+                packageFileInfo.CopyTo(Path.Combine(PackagesPath, packageFileInfo.Name), true);
                 await File.WriteAllTextAsync(Path.Combine(packageExtractDir, "package.json"), packageJson.ToString());
+
+                if (updateIndex)
+                {
+                    UpdatePackageIndex(packageName);
+                }
             }
+        }
+
+        private string PackageDirectory(string packageName) => Path.Combine(Options.Location, packageName);
+
+        private void UpdatePackageIndex(string packageName)
+        {
+            var packageDir = PackageDirectory(packageName);
+
+            var versionDirs = Directory.EnumerateDirectories(packageDir);
+
+            var versionedPackageDetails = versionDirs.ToImmutableSortedDictionary(
+                x => new DirectoryInfo(x).Name,
+                versionDir =>
+                {
+                    var version = new DirectoryInfo(versionDir).Name;
+                    var packageJson = Path.Combine(versionDir, "package.json");
+                    var rawJson = JsonConvert.DeserializeObject<JObject>(File.ReadAllText(packageJson));
+                    rawJson.Add("dist", JObject.FromObject(new {tarball = PackageUrl(packageName, version)}));
+
+                    return rawJson;
+                });
+
+            var packageDetails = new
+            {
+                _id = "react-redux",
+                name = "react-redux",
+                versions = versionedPackageDetails
+            };
+
+            var packageDetailsJson = JsonConvert.SerializeObject(packageDetails, Formatting.Indented);
+
+            File.WriteAllText(Path.Combine(packageDir, "index.html"), packageDetailsJson);
+        }
+
+        private Uri PackageUrl(string packageName, string version)
+        {
+            var fileName = $"{packageName}-{version}.tgz";
+            var uri = new Uri(Options.BaseUri, $"_packages/{fileName}");
+
+            return uri;
         }
     }
 }

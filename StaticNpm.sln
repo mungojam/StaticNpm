@@ -7,6 +7,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "StaticNpmLib", "StaticNpmLi
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "StaticNpm", "StaticNpm\StaticNpm.csproj", "{08D889A3-2777-4FDA-A32E-8452A63809B0}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "StaticNpmTests", "StaticNpmTests\StaticNpmTests.csproj", "{878A8F3D-B8DC-4A83-A97C-5C96477ED248}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +23,10 @@ Global
 		{08D889A3-2777-4FDA-A32E-8452A63809B0}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{08D889A3-2777-4FDA-A32E-8452A63809B0}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{08D889A3-2777-4FDA-A32E-8452A63809B0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{878A8F3D-B8DC-4A83-A97C-5C96477ED248}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{878A8F3D-B8DC-4A83-A97C-5C96477ED248}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{878A8F3D-B8DC-4A83-A97C-5C96477ED248}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{878A8F3D-B8DC-4A83-A97C-5C96477ED248}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
