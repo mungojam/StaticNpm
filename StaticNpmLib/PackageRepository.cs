@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
-using System.Security;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
@@ -24,6 +23,68 @@ namespace static_npm
 
         private PackageRepositoryOptions Options { get; }
 
+        public void Initialize()
+        {
+            Directory.CreateDirectory(Options.Location);
+            Directory.CreateDirectory(PackagesDir);
+        }
+
+        public async Task Add(string packageSource)
+        {
+            Initialize();
+
+            if (Directory.Exists(packageSource))
+            {
+                foreach (var packageFile in Directory.EnumerateFiles(packageSource, "*.tgz"))
+                {
+                    await AddFile(new FileInfo(packageFile));
+                }
+            }
+            else if (File.Exists(packageSource))
+            {
+                await AddFile(new FileInfo(packageSource));
+            }
+            else
+            {
+                throw new ArgumentException($"Provided path is not a file or folder: '{packageSource}'", nameof(packageSource));
+            }
+
+
+            async Task AddFile(FileInfo packageFile)
+            {
+                var packageJson = await GetPackageJsonAsync(packageFile);
+
+                var packageName = packageJson["name"].ToString();
+                var packageVersion = packageJson["version"].ToString();
+
+                //Now that we know the package looks valid, we can copy it to the packages dir (if required)
+                if (!SameDirectory(packageFile.DirectoryName, PackagesDir))
+                    packageFile.CopyTo(Path.Combine(PackagesDir, packageFile.Name), true);
+
+                await UpdatePackageExtractCache(packageName, packageVersion, packageJson);
+
+                UpdatePackageIndex(packageName);
+
+                static bool SameDirectory(string path1, string path2)
+                {
+                    return string.Equals(
+                                Path.GetFullPath(path1).TrimEnd('\\'),
+                                Path.GetFullPath(path2).TrimEnd('\\'),
+                                StringComparison.InvariantCultureIgnoreCase)
+                        ;
+                }
+            }
+        }
+
+        private async Task UpdatePackageExtractCache(string packageName, string packageVersion, JObject packageJson)
+        {
+            var packageExtractDir = PackageExtractDir(packageName, packageVersion);
+
+            Directory.CreateDirectory(packageExtractDir);
+
+            await File.WriteAllTextAsync(Path.Combine(packageExtractDir, "package.json"), packageJson.ToString());
+        }
+
 
         private static async Task<JObject> GetPackageJsonAsync(FileInfo file)
         {
@@ -40,88 +101,38 @@ namespace static_npm
             var jsonObj = JsonConvert.DeserializeObject<JObject>(packageJsonText);
 
             return jsonObj;
-        }
 
-
-        private static string GetTemporaryDirectory()
-        {
-            var tempDirectory = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
-            Directory.CreateDirectory(tempDirectory);
-            return tempDirectory;
-        }
-
-        public void Initialize()
-        {
-            Directory.CreateDirectory(Options.Location);
-            Directory.CreateDirectory(PackagesPath);
-        }
-
-        private string PackagesPath => Path.Combine(Options.Location, "_packages");
-
-        public async Task Add(string packageSource)
-        {
-            Initialize();
-
-            if (Directory.Exists(packageSource))
+            static string GetTemporaryDirectory()
             {
-                foreach (var packageFile in Directory.EnumerateFiles(packageSource, "*.tgz"))
-                {
-                    await AddFile(packageFile);
-                }
-            }
-            else if (File.Exists(packageSource))
-            {
-                await AddFile(packageSource);
-            }
-            else
-            {
-                throw new ArgumentException($"Provided path is not a file or folder: '{packageSource}'", nameof(packageSource));
-            }
-
-
-            async Task AddFile(string packageFile, bool updateIndex = true)
-            {
-                var packageFileInfo = new FileInfo(packageFile);
-
-                var packageJson = await GetPackageJsonAsync(packageFileInfo);
-
-                var packageName = packageJson["name"].ToString();
-                var packageVersion = packageJson["version"].ToString();
-
-                var packageExtractDir = Path.Combine(PackageDirectory(packageName), packageVersion);
-
-                Directory.CreateDirectory(packageExtractDir);
-
-                if(!SameDirectory(packageFileInfo.DirectoryName, PackagesPath))
-                    packageFileInfo.CopyTo(Path.Combine(PackagesPath, packageFileInfo.Name), true);
-
-                await File.WriteAllTextAsync(Path.Combine(packageExtractDir, "package.json"), packageJson.ToString());
-
-                if (updateIndex)
-                {
-                    UpdatePackageIndex(packageName);
-                }
-
-                static bool SameDirectory(string path1, string path2)
-                {
-                    return string.Equals(
-                                Path.GetFullPath(path1).TrimEnd('\\'),
-                                Path.GetFullPath(path2).TrimEnd('\\'),
-                                StringComparison.InvariantCultureIgnoreCase)
-                        ;
-                }
+                var tempDirectory = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+                Directory.CreateDirectory(tempDirectory);
+                return tempDirectory;
             }
         }
 
-        private string PackageDirectory(string packageName) => Path.Combine(Options.Location, packageName.Replace("/", "%2f"));
+
+        private string PackagesDir => Path.Combine(Options.Location, "_packages");
+
+        /// <summary>
+        /// The top level extract folder for the specified package. The package.json files for each version
+        /// are extracted here as a cache so that they do not need to be re-extracted when recreating the index for
+        /// a new package version
+        /// added
+        /// </summary>
+        /// <param name="packageName"></param>
+        /// <returns></returns>
+        private string PackageExtractDir(string packageName) => Path.Combine(Options.Location, packageName.Replace("/", "%2f"));
+        private string PackageExtractDir(string packageName, string packageVersion) => Path.Combine(PackageExtractDir(packageName), packageVersion);
+
 
         private void UpdatePackageIndex(string packageName)
         {
-            var packageDir = PackageDirectory(packageName);
+            var packageDir = PackageExtractDir(packageName);
 
             var versionDirs = Directory.EnumerateDirectories(packageDir);
 
-            var versionDetails = versionDirs.Select(versionDir =>
+            var versionDetails = 
+                versionDirs.Select(versionDir =>
                 {
                     var versionString = new DirectoryInfo(versionDir).Name;
                     return (versionDir, versionString, version: SemVersion.Parse(versionString));
@@ -136,8 +147,8 @@ namespace static_npm
                 x => x.versionString,
                 x =>
                 {
-                    var versionString = x.versionString;
-                    var packageJson = Path.Combine(x.versionDir, "package.json");
+                    var (versionDir, versionString, _) = x;
+                    var packageJson = Path.Combine(versionDir, "package.json");
                     var rawJson = JsonConvert.DeserializeObject<JObject>(File.ReadAllText(packageJson));
                     rawJson.Add("dist", JObject.FromObject(new
                     {
@@ -150,8 +161,8 @@ namespace static_npm
 
             var packageDetails = new Dictionary<string, object>
             {
-                { "_id", "react-redux"},
-                { "name", "react-redux"},
+                { "_id", packageName},
+                { "name", packageName},
                 { "dist-tags", new {
                     latest = versionDetails.Last().version.ToString()
                 }},
@@ -165,10 +176,29 @@ namespace static_npm
 
         private string ShaSum(string packageName, string versionString)
         {
-            var packageFile = Path.Combine(PackagesPath, PackageFileName(packageName, versionString));
+            var packageFile = Path.Combine(PackagesDir, PackageFileName(packageName, versionString));
 
             return ComputeShaSum(File.ReadAllBytes(packageFile));
+
+            static string ComputeShaSum(byte[] sourceBytes)
+            {
+                // Create a SHA256   
+                using var sha256Hash = SHA1.Create();
+
+                // ComputeHash - returns byte array  
+                var bytes = sha256Hash.ComputeHash(sourceBytes);
+
+                // Convert byte array to a string   
+                var builder = new StringBuilder();
+                foreach (var t in bytes)
+                {
+                    builder.Append(t.ToString("x2"));
+                }
+
+                return builder.ToString();
+            }
         }
+
 
         private Uri PackageUrl(string packageName, string version)
         {
@@ -183,22 +213,5 @@ namespace static_npm
             return $"{packageName.Replace("/", "-")}-{version}.tgz";
         }
 
-        static string ComputeShaSum(byte[] sourceBytes)
-        {
-            // Create a SHA256   
-            using var sha256Hash = SHA1.Create();
-
-            // ComputeHash - returns byte array  
-            var bytes = sha256Hash.ComputeHash(sourceBytes);
-
-            // Convert byte array to a string   
-            var builder = new StringBuilder();
-            foreach (var t in bytes)
-            {
-                builder.Append(t.ToString("x2"));
-            }
-
-            return builder.ToString();
-        }
     }
 }
