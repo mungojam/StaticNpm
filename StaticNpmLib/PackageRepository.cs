@@ -18,48 +18,54 @@ namespace static_npm
     {
         public PackageRepository(PackageRepositoryOptions options)
         {
-            Options = options;
+            PackagesDir = options.PackagesDir;
+            RegistryDir = options.RegistryDir;
+            PackageInfoBaseExtractDir = options.PackageInfoBaseExtractDir;
+            BasePackagesUri = options.BasePackagesUri;
         }
 
-        private PackageRepositoryOptions Options { get; }
+        private string RegistryDir { get; }
+        private Uri BasePackagesUri { get; }
+        private string PackagesDir { get; }
+        private string PackageInfoBaseExtractDir { get; }
 
         public void Initialize()
         {
-            Directory.CreateDirectory(Options.Location);
             Directory.CreateDirectory(PackagesDir);
+            Directory.CreateDirectory(RegistryDir);
         }
 
-        public async Task Add(string packageSource)
+        public async Task Add(string source)
         {
             Initialize();
 
-            if (Directory.Exists(packageSource))
+            if (Directory.Exists(source))
             {
-                foreach (var packageFile in Directory.EnumerateFiles(packageSource, "*.tgz"))
+                foreach (var packageFile in Directory.EnumerateFiles(source, "*.tgz"))
                 {
-                    await AddFile(new FileInfo(packageFile));
+                    await AddPackage(new FileInfo(packageFile));
                 }
             }
-            else if (File.Exists(packageSource))
+            else if (File.Exists(source))
             {
-                await AddFile(new FileInfo(packageSource));
+                await AddPackage(new FileInfo(source));
             }
             else
             {
-                throw new ArgumentException($"Provided path is not a file or folder: '{packageSource}'", nameof(packageSource));
+                throw new ArgumentException($"Provided path is not a file or folder: '{source}'", nameof(source));
             }
 
 
-            async Task AddFile(FileInfo packageFile)
+            async Task AddPackage(FileInfo file)
             {
-                var packageJson = await GetPackageJsonAsync(packageFile);
+                var packageJson = await GetPackageJsonAsync(file);
 
                 var packageName = packageJson["name"].ToString();
                 var packageVersion = packageJson["version"].ToString();
 
                 //Now that we know the package looks valid, we can copy it to the packages dir (if required)
-                if (!SameDirectory(packageFile.DirectoryName, PackagesDir))
-                    packageFile.CopyTo(Path.Combine(PackagesDir, packageFile.Name), true);
+                if (!SameDirectory(file.DirectoryName, PackagesDir))
+                    file.CopyTo(Path.Combine(PackagesDir, file.Name), true);
 
                 await UpdatePackageExtractCache(packageName, packageVersion, packageJson);
 
@@ -76,15 +82,27 @@ namespace static_npm
             }
         }
 
-        private async Task UpdatePackageExtractCache(string packageName, string packageVersion, JObject packageJson)
+        private async Task UpdatePackageExtractCache(string name, string version, JObject info)
         {
-            var packageExtractDir = PackageExtractDir(packageName, packageVersion);
+            var packageJsonExtractFile = PackageJsonExtractFile(name, version);
+            EnsureParentDirExists(packageJsonExtractFile);
 
-            Directory.CreateDirectory(packageExtractDir);
-
-            await File.WriteAllTextAsync(Path.Combine(packageExtractDir, "package.json"), packageJson.ToString());
+            await File.WriteAllTextAsync(packageJsonExtractFile.FullName, info.ToString());
         }
 
+        private static void EnsureParentDirExists(FileInfo file)
+        {
+            var parentDirectory = file.Directory ??
+                                  throw new ApplicationException(
+                                      $"Unexpected issue with path: {file}");
+
+            parentDirectory.Create();
+        }
+
+        private static void EnsureParentDirExists(string file)
+        {
+            EnsureParentDirExists(new FileInfo(file));
+        }
 
         private static async Task<JObject> GetPackageJsonAsync(FileInfo file)
         {
@@ -97,7 +115,9 @@ namespace static_npm
 
             tarArchive.ExtractContents(tempDir);
 
-            var packageJsonText = await File.ReadAllTextAsync(Path.Combine(tempDir, "package", "package.json"));
+            var packageDir = Directory.EnumerateDirectories(tempDir).Single();
+
+            var packageJsonText = await File.ReadAllTextAsync(Path.Combine(packageDir, "package.json"));
             var jsonObj = JsonConvert.DeserializeObject<JObject>(packageJsonText);
 
             return jsonObj;
@@ -110,24 +130,30 @@ namespace static_npm
             }
         }
 
-
-        private string PackagesDir => Path.Combine(Options.Location, "_packages");
-
         /// <summary>
         /// The top level extract folder for the specified package. The package.json files for each version
         /// are extracted here as a cache so that they do not need to be re-extracted when recreating the index for
         /// a new package version
         /// added
         /// </summary>
-        /// <param name="packageName"></param>
+        /// <param name="name"></param>
         /// <returns></returns>
-        private string PackageExtractDir(string packageName) => Path.Combine(Options.Location, packageName.Replace("/", "%2f"));
-        private string PackageExtractDir(string packageName, string packageVersion) => Path.Combine(PackageExtractDir(packageName), packageVersion);
+        private string PackageJsonExtractDir(string name) => Path.Combine(PackageInfoBaseExtractDir, name.Replace("/", "%2f"));
 
+        private FileInfo PackageJsonExtractFile(string name, string version) 
+            => new FileInfo(
+                Path.Combine(
+                    PackageJsonExtractDir(name), 
+                    version, 
+                    "package.json"
+                )
+            );
 
-        private void UpdatePackageIndex(string packageName)
+        private string PackageRegistryFile(string name) => Path.Combine(RegistryDir, name);
+
+        private void UpdatePackageIndex(string name)
         {
-            var packageDir = PackageExtractDir(packageName);
+            var packageDir = PackageJsonExtractDir(name);
 
             var versionDirs = Directory.EnumerateDirectories(packageDir);
 
@@ -152,8 +178,8 @@ namespace static_npm
                     var rawJson = JsonConvert.DeserializeObject<JObject>(File.ReadAllText(packageJson));
                     rawJson.Add("dist", JObject.FromObject(new
                     {
-                        tarball = PackageUrl(packageName, versionString),
-                        shasum = ShaSum(packageName, versionString)
+                        tarball = PackageUrl(name, versionString),
+                        shasum = ShaSum(name, versionString)
                     }));
 
                     return rawJson;
@@ -161,8 +187,8 @@ namespace static_npm
 
             var packageDetails = new Dictionary<string, object>
             {
-                { "_id", packageName},
-                { "name", packageName},
+                { "_id", name},
+                { "name", name},
                 { "dist-tags", new {
                     latest = versionDetails.Last().version.ToString()
                 }},
@@ -171,22 +197,24 @@ namespace static_npm
 
             var packageDetailsJson = JsonConvert.SerializeObject(packageDetails);
 
-            File.WriteAllText(Path.Combine(packageDir, "index.html"), packageDetailsJson);
+            var registryFile = PackageRegistryFile(name);
+            EnsureParentDirExists(registryFile);
+
+            File.WriteAllText(registryFile, packageDetailsJson);
         }
 
-        private string ShaSum(string packageName, string versionString)
+        private string ShaSum(string name, string versionString)
         {
-            var packageFile = Path.Combine(PackagesDir, PackageFileName(packageName, versionString));
+            var packageFile = Path.Combine(PackagesDir, PackageFileName(name, versionString));
 
             return ComputeShaSum(File.ReadAllBytes(packageFile));
 
             static string ComputeShaSum(byte[] sourceBytes)
-            {
-                // Create a SHA256   
-                using var sha256Hash = SHA1.Create();
+            {   
+                using var shaHash = SHA512.Create();
 
                 // ComputeHash - returns byte array  
-                var bytes = sha256Hash.ComputeHash(sourceBytes);
+                var bytes = shaHash.ComputeHash(sourceBytes);
 
                 // Convert byte array to a string   
                 var builder = new StringBuilder();
@@ -200,17 +228,17 @@ namespace static_npm
         }
 
 
-        private Uri PackageUrl(string packageName, string version)
+        private Uri PackageUrl(string name, string version)
         {
-            var fileName = PackageFileName(packageName, version);
-            var uri = new Uri(Options.BaseUri, $"_packages/{fileName}");
+            var fileName = PackageFileName(name, version);
+            var uri = new Uri(BasePackagesUri, fileName);
 
             return uri;
         }
 
-        private static string PackageFileName(string packageName, string version)
+        private static string PackageFileName(string name, string version)
         {
-            return $"{packageName.Replace("/", "-")}-{version}.tgz";
+            return $"{name.Replace("/", "-")}-{version}.tgz";
         }
 
     }

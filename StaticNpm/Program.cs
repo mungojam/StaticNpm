@@ -9,13 +9,11 @@ namespace StaticNpm
     {
         static async Task<int> Main(string[] args)
         {
-
             try
             {
-                await Parser.Default.ParseArguments<AddOptions, InitOptions>(args)
-                    .MapResult<AddOptions, InitOptions, Task>(
+                await Parser.Default.ParseArguments<AddOptions>(args)
+                    .MapResult(
                         RunAdd,
-                        RunInit,
                         errs => throw new InvalidOperationException()
                     );
             }
@@ -29,27 +27,11 @@ namespace StaticNpm
 
         }
 
-        private static Task RunInit(InitOptions initOptions)
-        {
-            PackageRepository().Initialize();
-            return Task.CompletedTask;
-        }
-
         private static async Task RunAdd(AddOptions options)
         {
-            var packageRepo = PackageRepository();
+            var packageRepo = new PackageRepository(options.RepositoryOptions);
 
             await packageRepo.Add(options.Source);
-        }
-
-        private static PackageRepository PackageRepository()
-        {
-            var extractPath = @"C:\Users\mark\Dropbox\Marks\Desktop\static-npm-repo";
-
-            var repoOptions = new PackageRepositoryOptions(extractPath, new Uri("http://localhost:9000"));
-
-            var packageRepo = new PackageRepository(repoOptions);
-            return packageRepo;
         }
     }
 }

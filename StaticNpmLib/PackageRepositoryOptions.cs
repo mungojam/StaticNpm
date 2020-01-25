@@ -4,14 +4,21 @@ namespace static_npm
 {
     public class PackageRepositoryOptions
     {
-        public PackageRepositoryOptions(string location, Uri baseUri)
+        public PackageRepositoryOptions(
+                string packagesDir, Uri basePackagesUri, 
+                string registryDir, string infoBaseExtractDir
+                )
         {
-            Location = location;
-            BaseUri = baseUri;
+            PackagesDir = packagesDir;
+            BasePackagesUri = basePackagesUri;
+            RegistryDir = registryDir;
+            PackageInfoBaseExtractDir = infoBaseExtractDir;
         }
 
-        public Uri BaseUri { get; }
+        public Uri BasePackagesUri { get; }
 
-        public string Location { get; }
+        public string PackagesDir { get; }
+        public string RegistryDir { get; }
+        public string PackageInfoBaseExtractDir { get; }
     }
 }
