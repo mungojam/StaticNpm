@@ -29,10 +29,11 @@ namespace static_npm
         private string PackagesDir { get; }
         private string PackageInfoBaseExtractDir { get; }
 
-        public void Initialize()
+        private void Initialize()
         {
             Directory.CreateDirectory(PackagesDir);
             Directory.CreateDirectory(RegistryDir);
+            Directory.CreateDirectory(PackageInfoBaseExtractDir);
         }
 
         public async Task Add(string source)
